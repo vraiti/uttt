@@ -174,9 +174,10 @@ class OptimizedAlphaZeroTrainer:
             self.model = model.to(device)
 
         # Compile model for optimization (PyTorch 2.0+)
-        if hasattr(torch, 'compile'):
-            print("  Compiling model with torch.compile...")
-            self.model = torch.compile(self.model, mode='max-autotune')
+        # Disabled due to InductorError with large models
+        # if hasattr(torch, 'compile'):
+        #     print("  Compiling model with torch.compile...")
+        #     self.model = torch.compile(self.model, mode='max-autotune')
 
         # Optimizer and mixed precision scaler
         self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=1e-4)
