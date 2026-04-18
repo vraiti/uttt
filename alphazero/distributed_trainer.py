@@ -26,55 +26,65 @@ def self_play_worker(gpu_id, model_state, num_games, num_simulations, c_puct, te
         temperature_threshold: Temperature threshold for move selection
         return_queue: Queue to return results
     """
-    from uttt_engine import UTTTGame
+    try:
+        import torch
+        from uttt_engine import UTTTGame
 
-    # Set device
-    device = f'cuda:{gpu_id}'
+        # Set CUDA device
+        torch.cuda.set_device(gpu_id)
+        device = f'cuda:{gpu_id}'
 
-    # Load model on this GPU
-    model = UTTTNet().to(device)
-    model.load_state_dict(model_state)
-    model.eval()
+        # Load model on this GPU
+        model = UTTTNet().to(device)
+        model.load_state_dict(model_state)
+        model.eval()
 
-    # Create MCTS
-    mcts = MCTS(model, device=device, num_simulations=num_simulations, c_puct=c_puct)
+        # Create MCTS
+        mcts = MCTS(model, device=device, num_simulations=num_simulations, c_puct=c_puct)
 
-    # Play games
-    all_game_data = []
+        # Play games
+        all_game_data = []
 
-    for game_idx in range(num_games):
-        game = UTTTGame()
-        game_data = []
-        move_count = 0
+        for game_idx in range(num_games):
+            game = UTTTGame()
+            game_data = []
+            move_count = 0
 
-        while not game.is_terminal():
-            # Use temperature for exploration in early game
-            temperature = 1.0 if move_count < temperature_threshold else 0.1
+            while not game.is_terminal():
+                # Use temperature for exploration in early game
+                temperature = 1.0 if move_count < temperature_threshold else 0.1
 
-            # Get MCTS policy
-            mcts.temperature = temperature
-            policy, move = mcts.search(game)
+                # Get MCTS policy
+                mcts.temperature = temperature
+                policy, move = mcts.search(game)
 
-            # Store state and policy
-            state = encode_state(game)
-            game_data.append((state.cpu(), policy, game.current_player()))
+                # Store state and policy
+                state = encode_state(game)
+                game_data.append((state.cpu(), policy, game.current_player()))
 
-            # Make move
-            game = game.make_move(move[0], move[1])
-            move_count += 1
+                # Make move
+                game = game.make_move(move[0], move[1])
+                move_count += 1
 
-        # Get final outcome
-        result = game.get_result()
-        if result is None:
-            result = 0
+            # Get final outcome
+            result = game.get_result()
+            if result is None:
+                result = 0
 
-        # Convert to training data with proper value assignment
-        for state, policy, player in game_data:
-            value = result * player
-            all_game_data.append((state, policy, value))
+            # Convert to training data with proper value assignment
+            for state, policy, player in game_data:
+                value = result * player
+                all_game_data.append((state, policy, value))
 
-    # Return results via queue
-    return_queue.put((gpu_id, all_game_data))
+        # Return results via queue
+        return_queue.put((gpu_id, all_game_data))
+
+    except Exception as e:
+        # Return error via queue
+        import traceback
+        return_queue.put((gpu_id, []))
+        print(f"GPU {gpu_id} worker error: {e}")
+        traceback.print_exc()
 
 
 class DistributedAlphaZeroTrainer:
@@ -157,7 +167,10 @@ class DistributedAlphaZeroTrainer:
         print(f"Games per GPU: {games_per_gpu}")
 
         # Create multiprocessing context
-        mp.set_start_method('spawn', force=True)
+        try:
+            mp.set_start_method('spawn')
+        except RuntimeError:
+            pass  # Already set
         return_queue = mp.Queue()
 
         # Launch workers
