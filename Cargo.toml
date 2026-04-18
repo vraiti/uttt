@@ -1,0 +1,16 @@
+[package]
+name = "uttt-python"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "uttt_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"] }
+ultimattt = { path = "ultimattt" }
+numpy = "0.20"
+
+[workspace]
+members = []
