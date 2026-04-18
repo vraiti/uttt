@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.multiprocessing as mp
 from torch.utils.data import Dataset, DataLoader
-from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 
 from .network import UTTTNet, encode_state
@@ -181,7 +180,7 @@ class OptimizedAlphaZeroTrainer:
 
         # Optimizer and mixed precision scaler
         self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=1e-4)
-        self.scaler = GradScaler()
+        self.scaler = torch.amp.GradScaler('cuda')
 
         # Replay buffer
         self.replay_buffer = deque(maxlen=replay_buffer_size)
@@ -283,7 +282,7 @@ class OptimizedAlphaZeroTrainer:
                 target_values = target_values.unsqueeze(1).to(self.device, non_blocking=True)
 
                 # Mixed precision forward pass
-                with autocast(dtype=torch.bfloat16):
+                with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                     log_policies, values = self.model(states)
 
                     # Policy loss: cross-entropy

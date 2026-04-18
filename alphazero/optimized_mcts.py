@@ -98,11 +98,12 @@ class BatchedMCTS:
         self.model.eval()
         states = torch.stack([encode_state(game) for game in games]).to(self.device)
 
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
             log_policies, values = self.model(states)
 
-        policies = torch.exp(log_policies).cpu().numpy()
-        values = values.cpu().numpy().flatten()
+        # Convert to float32 before numpy (numpy doesn't support bfloat16)
+        policies = torch.exp(log_policies).float().cpu().numpy()
+        values = values.float().cpu().numpy().flatten()
         return policies, values
 
     def search(self, game):
