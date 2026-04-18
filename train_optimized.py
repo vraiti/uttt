@@ -85,6 +85,8 @@ def main():
         checkpoint_dir=args.checkpoint_dir,
         mcts_batch_size=args.mcts_batch_size,
         num_workers=args.num_workers,
+        num_channels=args.num_channels,
+        num_res_blocks=args.num_res_blocks,
     )
 
     # Resume from checkpoint if specified

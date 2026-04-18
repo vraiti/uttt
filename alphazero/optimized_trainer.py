@@ -46,7 +46,7 @@ class ReplayDataset(Dataset):
         )
 
 
-def self_play_worker_optimized(gpu_id, model_state, num_games, num_simulations, c_puct, temperature_threshold, batch_size, return_queue):
+def self_play_worker_optimized(gpu_id, model_state, model_params, num_games, num_simulations, c_puct, temperature_threshold, batch_size, return_queue):
     """
     Optimized worker function with batched MCTS.
     """
@@ -57,8 +57,9 @@ def self_play_worker_optimized(gpu_id, model_state, num_games, num_simulations, 
         torch.cuda.set_device(gpu_id)
         device = f'cuda:{gpu_id}'
 
-        # Load model
-        model = UTTTNet().to(device)
+        # Load model with correct parameters
+        num_channels, num_res_blocks = model_params
+        model = UTTTNet(num_channels=num_channels, num_res_blocks=num_res_blocks).to(device)
         model.load_state_dict(model_state)
         model.eval()
 
@@ -122,6 +123,8 @@ class OptimizedAlphaZeroTrainer:
         checkpoint_dir='checkpoints',
         mcts_batch_size=64,
         num_workers=4,
+        num_channels=256,
+        num_res_blocks=10,
     ):
         """
         Optimized AlphaZero trainer with batched MCTS and mixed precision.
@@ -150,6 +153,8 @@ class OptimizedAlphaZeroTrainer:
         self.checkpoint_dir = checkpoint_dir
         self.mcts_batch_size = mcts_batch_size
         self.num_workers = num_workers
+        self.num_channels = num_channels
+        self.num_res_blocks = num_res_blocks
 
         # Auto-detect GPUs
         if num_gpus is None:
@@ -165,7 +170,7 @@ class OptimizedAlphaZeroTrainer:
 
         # Initialize model
         if model is None:
-            self.model = UTTTNet().to(device)
+            self.model = UTTTNet(num_channels=num_channels, num_res_blocks=num_res_blocks).to(device)
         else:
             self.model = model.to(device)
 
@@ -187,7 +192,10 @@ class OptimizedAlphaZeroTrainer:
         """Generate self-play games with optimized batched MCTS."""
         print(f"Generating {self.num_selfplay_games} self-play games (batched MCTS)...")
 
-        model_state = self.model.state_dict()
+        # Get state dict from unwrapped model if compiled
+        model_to_share = self.model._orig_mod if hasattr(self.model, '_orig_mod') else self.model
+        model_state = model_to_share.state_dict()
+        model_params = (self.num_channels, self.num_res_blocks)
 
         # Distribute games
         games_per_gpu = [self.num_selfplay_games // self.num_gpus] * self.num_gpus
@@ -212,6 +220,7 @@ class OptimizedAlphaZeroTrainer:
                 args=(
                     gpu_id,
                     model_state,
+                    model_params,
                     games_per_gpu[gpu_id],
                     self.num_simulations,
                     self.c_puct,
