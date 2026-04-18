@@ -58,9 +58,9 @@ def self_play_worker(gpu_id, model_state, num_games, num_simulations, c_puct, te
                 mcts.temperature = temperature
                 policy, move = mcts.search(game)
 
-                # Store state and policy
+                # Store state and policy (convert to numpy to avoid torch multiprocessing issues)
                 state = encode_state(game)
-                game_data.append((state.cpu(), policy, game.current_player()))
+                game_data.append((state.cpu().numpy(), policy, game.current_player()))
 
                 # Make move
                 game = game.make_move(move[0], move[1])
@@ -236,8 +236,8 @@ class DistributedAlphaZeroTrainer:
             for i in range(0, len(data) - self.batch_size + 1, self.batch_size):
                 batch = data[i:i + self.batch_size]
 
-                # Prepare batch
-                states = torch.stack([s for s, p, v in batch]).to(self.device)
+                # Prepare batch (convert numpy arrays back to torch tensors)
+                states = torch.stack([torch.from_numpy(s) if isinstance(s, np.ndarray) else s for s, p, v in batch]).to(self.device)
                 target_policies = torch.tensor([p for s, p, v in batch], dtype=torch.float32).to(self.device)
                 target_values = torch.tensor([[v] for s, p, v in batch], dtype=torch.float32).to(self.device)
 
